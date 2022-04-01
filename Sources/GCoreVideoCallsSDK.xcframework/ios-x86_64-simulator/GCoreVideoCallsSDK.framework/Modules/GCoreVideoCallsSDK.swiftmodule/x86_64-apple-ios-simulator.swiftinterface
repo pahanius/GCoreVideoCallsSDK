@@ -1,5 +1,5 @@
 // swift-interface-format-version: 1.0
-// swift-compiler-version: Apple Swift version 5.5.2 (swiftlang-1300.0.47.5 clang-1300.0.29.30)
+// swift-compiler-version: Apple Swift version 5.6 (swiftlang-5.6.0.323.62 clang-1316.0.20.8)
 // swift-module-flags: -target x86_64-apple-ios12.0-simulator -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -O -module-name GCoreVideoCallsSDK
 import AVFoundation
 import CommonCrypto
@@ -107,6 +107,13 @@ public protocol FrameCollectorDelegate : AnyObject {
   }
   public func add(frame: GCoreVideoCallsSDK.Frame)
   @objc deinit
+}
+final public class JoinPermissionsObject : Swift.Decodable {
+  final public let audio: Swift.Bool
+  final public let video: Swift.Bool
+  final public let share: Swift.Bool
+  @objc deinit
+  public init(from decoder: Swift.Decoder) throws
 }
 @available(macOS 10.14, iOS 12.0, watchOS 5.0, tvOS 12.0, *)
 @available(watchOS, unavailable)
@@ -221,6 +228,7 @@ public protocol RoomListener {
   func roomClientReconnecting()
   func roomClientReconnectingFailed()
   func roomClientSocketDidDisconnected(roomClient: GCoreVideoCallsSDK.GCoreRoomClient)
+  func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, joinPermissions: GCoreVideoCallsSDK.JoinPermissionsObject)
   func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, joinWithPeersInRoom peers: [GCoreVideoCallsSDK.PeerObject])
   func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, handlePeer: GCoreVideoCallsSDK.PeerObject)
   func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, peerClosed: Swift.String)
@@ -233,6 +241,16 @@ public protocol RoomListener {
   func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, produceRemoteAudio audioObject: GCoreVideoCallsSDK.AudioObject)
   func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, didCloseRemoteAudioByModerator byModerator: Swift.Bool, audioObject: GCoreVideoCallsSDK.AudioObject)
   func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, activeSpeakerPeers peers: [Swift.String])
+  func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, toggleByModerator kind: Swift.String, status: Swift.Bool)
+  func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, acceptedPermissionFromModerator fromModerator: Swift.Bool, peer: GCoreVideoCallsSDK.PeerObject, requestType: Swift.String)
+  func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, disableProducerByModerator kind: Swift.String)
+  func roomClientWaitingForModeratorJoinAccept()
+  func roomClientModeratorRejectedJoinRequest()
+  func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, moderatorIsAskedToJoin: GCoreVideoCallsSDK.ModeratorIsAskedToJoin)
+  func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, updateMeInfo: GCoreVideoCallsSDK.UpdateMeInfoObject)
+  func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, requestToModerator: GCoreVideoCallsSDK.RequestToModerator)
+  func roomClientRemovedByModerator()
+  func roomClient(roomClient: GCoreVideoCallsSDK.GCoreRoomClient, captureSession: AVFoundation.AVCaptureSession, captureDevice: AVFoundation.AVCaptureDevice)
 }
 public enum MediaError : Swift.Error {
   case CAMERA_DEVICE_NOT_FOUND
@@ -326,6 +344,13 @@ extension GCoreVideoCallsSDK.FoundationSecurity : GCoreVideoCallsSDK.Certificate
 }
 extension GCoreVideoCallsSDK.FoundationSecurity : GCoreVideoCallsSDK.HeaderValidator {
   public func validate(headers: [Swift.String : Swift.String], key: Swift.String) -> Swift.Error?
+}
+final public class RequestToModerator : Swift.Decodable {
+  final public let peerId: Swift.String
+  final public let userName: Swift.String
+  final public let requestType: Swift.String
+  @objc deinit
+  public init(from decoder: Swift.Decoder) throws
 }
 public class WSCompression : GCoreVideoCallsSDK.CompressionHandler {
   public init()
@@ -727,7 +752,7 @@ extension GCoreVideoCallsSDK.JSON : Swift.Codable {
 }
 public struct MeetRoomParametrs : Swift.Decodable {
   public var customParameters: [Swift.String : Swift.String]
-  public init(roomId: Swift.String, displayName: Swift.String, peerId: Swift.String? = nil, clientHostName: Swift.String? = nil)
+  public init(roomId: Swift.String, displayName: Swift.String, peerId: Swift.String? = nil, clientHostName: Swift.String? = nil, isModerator: Swift.Bool)
   public var parameters: [Swift.String : Swift.String] {
     get
   }
@@ -750,9 +775,16 @@ final public class GCoreRoomClient {
   final public func toggleAudio(isOn: Swift.Bool)
   final public func toggleVideo(isOn: Swift.Bool)
   final public func toggleCameraPosition(completion: ((Swift.Error?) -> Swift.Void)?)
+  final public func askModeratorToEnableTrack(kind: Swift.String)
+  final public func acceptedPermissionByModerator(peerId: Swift.String, kind: Swift.String)
+  final public func rejectPermissionByModerator(peerId: Swift.String, kind: Swift.String)
+  final public func disableTrackProducerByModerator(peerId: Swift.String, kind: Swift.String)
   final public func open() throws
   final public func close()
   final public func audioSessionActivate()
+  final public func acceptJoinRequestByModerator(peerId: Swift.String)
+  final public func rejectJoinRequestByModerator(peerId: Swift.String)
+  final public func removeUserByModerator(peerId: Swift.String)
   @objc deinit
 }
 @_hasMissingDesignatedInitializers public class FoundationHTTPServerHandler : GCoreVideoCallsSDK.HTTPServerHandler {
@@ -773,6 +805,12 @@ public class NativeEngine : ObjectiveC.NSObject, GCoreVideoCallsSDK.Engine, Foun
   @objc public func urlSession(_ session: Foundation.URLSession, webSocketTask: Foundation.URLSessionWebSocketTask, didCloseWith closeCode: Foundation.URLSessionWebSocketTask.CloseCode, reason: Foundation.Data?)
   @objc override dynamic public init()
   @objc deinit
+}
+final public class ModeratorIsAskedToJoin : Swift.Decodable {
+  final public let peerId: Swift.String
+  final public let userName: Swift.String
+  @objc deinit
+  public init(from decoder: Swift.Decoder) throws
 }
 public class FoundationHTTPHandler : GCoreVideoCallsSDK.HTTPHandler {
   public init()
@@ -807,6 +845,16 @@ public enum ServerEvent {
 public protocol Server {
   func start(address: Swift.String, port: Swift.UInt16) -> Swift.Error?
 }
+final public class UpdateMeInfoObject : Swift.Decodable {
+  final public let peerId: Swift.String
+  final public let role: Swift.String
+  final public let displayName: Swift.String
+  final public let itisparticipant: Swift.Bool
+  final public let canRecord: Swift.Bool
+  final public let waitingRoom: Swift.Bool
+  @objc deinit
+  public init(from decoder: Swift.Decoder) throws
+}
 public class WSEngine : GCoreVideoCallsSDK.Engine, GCoreVideoCallsSDK.TransportEventClient, GCoreVideoCallsSDK.FramerEventClient, GCoreVideoCallsSDK.FrameCollectorDelegate, GCoreVideoCallsSDK.HTTPHandlerDelegate {
   public var respondToPingWithPong: Swift.Bool
   public init(transport: GCoreVideoCallsSDK.StarscreamTransport, certPinner: GCoreVideoCallsSDK.CertificatePinning? = nil, headerValidator: GCoreVideoCallsSDK.HeaderValidator = FoundationSecurity(), httpHandler: GCoreVideoCallsSDK.HTTPHandler = FoundationHTTPHandler(), framer: GCoreVideoCallsSDK.Framer = WSFramer(), compressionHandler: GCoreVideoCallsSDK.CompressionHandler? = nil)
@@ -823,7 +871,7 @@ public class WSEngine : GCoreVideoCallsSDK.Engine, GCoreVideoCallsSDK.TransportE
   public func didForm(event: GCoreVideoCallsSDK.FrameCollector.Event)
   @objc deinit
 }
-final public class PeerObject : Swift.Decodable {
+@_hasMissingDesignatedInitializers final public class PeerObject : Swift.Decodable {
   final public let id: Swift.String
   final public let displayName: Swift.String?
   @objc deinit
